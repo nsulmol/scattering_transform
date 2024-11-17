@@ -108,10 +108,18 @@ Use * or + to connect more than one condition.
             else:
                 st_calc.add_ref(ref=image_ref)
 
+        # NICK: Modified to match s_cov_iso, removed flatten=True
         if estimator_name=='s_mean_iso':
-            func_s = lambda x: st_calc.scattering_coef(x, flatten=True)['for_synthesis_iso']
+            func_s = lambda x: st_calc.scattering_coef(
+                x, if_large_batch=if_large_batch, j1j2_criteria=C11_criteria,
+                pseudo_coef=pseudo_coef,
+                remove_edge=remove_edge)['for_synthesis_iso']
+        # NICK: Modified to match s_cov, removed flatten=True
         if estimator_name=='s_mean':
-            func_s = lambda x: st_calc.scattering_coef(x, flatten=True)['for_synthesis']
+            func_s = lambda x: st_calc.scattering_coef(
+                x, if_large_batch=if_large_batch, j1j2_criteria=C11_criteria,
+                pseudo_coef=pseudo_coef,
+                remove_edge=remove_edge)['for_synthesis']
         if 's_cov_func' in estimator_name:
             def func_s(image):
                 s_cov_set = st_calc.scattering_cov(
@@ -192,6 +200,8 @@ Use * or + to connect more than one condition.
             ps, _ = get_power_spectrum(image, bins=bispectrum_bins, bin_type=bispectrum_bin_type)
             return torch.cat(((image.mean((-2,-1))/image.std((-2,-1)))[:,None], ps, bi), axis=-1)
         
+    # TODO: Estimator func! Calculates all of these coefficients based on
+    # the input image, concats, and returns.
     def func(image):
         coef_list = []
         if estimator_name!='':
@@ -211,6 +221,8 @@ Use * or + to connect more than one condition.
         return torch.cat(coef_list, axis=-1)
     
     # define loss function
+    # TODO: Magic number of 1e8!?!?!
+    # TODO: Loss function
     def quadratic_loss(target, model):
         return ((target - model)**2).mean()*1e8
     
@@ -280,9 +292,9 @@ def synthesis_general(
     N = image_init.shape[2]
     
     # formating target and image_init (to tensor, to cuda)
-    if type(target)==np.ndarray:
+    if type(target)==np.ndarray or type(target) == np.ma.MaskedArray:
         target = torch.from_numpy(target)
-    if type(image_init)==np.ndarray:
+    if type(image_init)==np.ndarray or type(image_init) == np.ma.MaskedArray:
         image_init = torch.from_numpy(image_init)
     if precision=='double':
         target = target.type(torch.DoubleTensor)
@@ -340,6 +352,9 @@ def synthesis_general(
         optimizer.zero_grad()
         loss = 0
         estimator_model = estimator_function(image_model.image)
+
+        # This averages the model and target over the 0th axis, i.e.
+        # all images in the ensemble.
         if ensemble: loss = loss_function(estimator_model.mean(0), estimator_target.mean(0))
         else: loss = loss_function(estimator_model, estimator_target)
         if print_each_step:
@@ -806,7 +821,7 @@ def convolve_by_FFT(field, func_in_Fourier, device='cpu'):
     '''
     get the power spectrum of a given image
     '''
-    if type(field) == np.ndarray:
+    if type(field) == np.ndarray or type(field) == np.ma.MaskedArray:
         field = torch.from_numpy(field)
     M, N = field.shape[-2:]
     field_f = torch.fft.fftn(field, dim=(-2,-1))

@@ -176,7 +176,7 @@ class Scattering2d(object):
         weight = self.weight
 
         # convert numpy array input into torch tensors
-        if type(data) == np.ndarray:
+        if type(data) == np.ndarray or type(data) == np.ma.MaskedArray:
             data = torch.from_numpy(data)
 
         # initialize tensors for scattering coefficients
@@ -325,7 +325,7 @@ class Scattering2d(object):
         weight = self.weight
 
         # convert numpy array input into torch tensors
-        if type(data) == np.ndarray:
+        if type(data) == np.ndarray or type(data) == np.ma.MaskedArray:
             data = torch.from_numpy(data)
 
         # initialize tensors for scattering coefficients
@@ -632,7 +632,7 @@ class Scattering2d(object):
             else: ref_P11 = self.ref_scattering_cov['P11']
 
         # convert numpy array input into torch tensors
-        if type(data) == np.ndarray:
+        if type(data) == np.ndarray or type(data) == np.ma.MaskedArray:
             data = torch.from_numpy(data)
             
         if self.device=='gpu':
@@ -870,9 +870,9 @@ class Scattering2d(object):
             ref_P11_b = self.ref_scattering_cov_2fields['P11_b']
         
         # convert numpy array input into torch tensors
-        if type(data_a) == np.ndarray:
+        if type(data_a) == np.ndarray or type(data_a) == np.ma.MaskedArray:
             data_a = torch.from_numpy(data_a)
-        if type(data_b) == np.ndarray:
+        if type(data_b) == np.ndarray or type(data_b) == np.ma.MaskedArray:
             data_b = torch.from_numpy(data_b)
             
         if self.device=='gpu':
@@ -1175,7 +1175,7 @@ class Scattering2d(object):
         weight = self.weight
 
         # convert numpy array input into torch tensors
-        if type(data) == np.ndarray:
+        if type(data) == np.ndarray or type(data) == np.ma.MaskedArray:
             data = torch.from_numpy(data)
 
         # move torch tensors to gpu device, if required
