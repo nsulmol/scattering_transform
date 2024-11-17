@@ -52,20 +52,8 @@ def load_images(path: str, ext: str = None) -> np.array:
 
         # Whiten before normalizing...
         img_src = scattering.whiten(img_src[np.newaxis, ...])[0, ...]
-
-        # print(f'img_src dtype: {img_src.dtype}, shape: {img_src.shape}')
         img_src = normalize_image(img_src)
-
-        # print(f'img_src dtype: {img_src.dtype}, shape: {img_src.shape}')
-
-        # print(f'img_src dtype: {img_src.dtype}, shape: {img_src.shape}')
-        # plt.imshow(img_src, interpolation='nearest')
-        # plt.show(block=True)
-
         arrs.append(img_src)
-        # print(f'arrs len: {len(arrs)}')
-
-    # print(f'arrs len: {len(arrs)}')
 
     # Convert to stacked array
     return np.stack(tuple(arrs))
@@ -131,18 +119,11 @@ def mask_images(arrs: np.array, total_labels: list[list[int, int, int, int]]
         for label in total_labels[i]:
             # label: x1x2y1y2
             # Set this label to True (which removes it from masked_array).
-
-            # print(f'label: {label}')
             ma_arr.mask[label[2]:label[3], label[0]:label[1]] = True
 
         masked_arrs.append(ma_arr)
 
-        # print('showing masked array...')
-        # plt.imshow(ma_arr, interpolation='nearest')
-        # plt.show(block=True)
-
     # Convert to stacked array
-    # return np.stack(tuple(masked_arrs))
     return np.ma.stack(tuple(masked_arrs))
 
 
@@ -158,27 +139,6 @@ def main():
     arrs = load_images(INDIR, EXT)
     total_labels = load_labels(os.path.join(INDIR, LABELS_FNAME))
     ma_arrs = mask_images(arrs, total_labels)
-
-    # print(ma_arrs[0])
-    # print(ma_arrs[0].mask)
-
-    # print('showing masked array...')
-    # plt.imshow(ma_arrs[0], interpolation='nearest')
-    # plt.show(block=True)
-
-    # plt.imshow(ma_arrs[0].mask, interpolation='nearest')
-    # plt.show(block=True)
-
-    # print('showing NOT masked array...')
-    # plt.imshow(arrs[0], interpolation='nearest')
-    # plt.show(block=True)
-
-    # print(f'arrs: shape: {arrs.shape}')
-    # print(f'total_labels: len: {len(total_labels)}')
-    # print(f'ma_arrs: shape: {ma_arrs.shape}')
-
-    # Whiten data  --- Does not work!
-    # arrs = scattering.whiten(arrs, overall=True)
 
     syns = scattering.synthesis('s_cov', ma_arrs, seed=0,
                                 ensemble=True, N_ensemble=N,
