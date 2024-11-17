@@ -174,7 +174,7 @@ def synthesize_images_only(img_dir: str, synthesis_count: int,
     arrs = load_images_from_dir(img_dir, img_ext)
     arrs = np.ma.stack(tuple(arrs))
     syns = scattering.synthesis(synth_style, arrs, seed=0,
-                                ensemble=True, N_ensemble=N,
+                                ensemble=True, N_ensemble=synthesis_count,
                                 print_each_step=True)
     return syns
 
@@ -200,7 +200,7 @@ def synthesize_images(json_path: str, img_dir: str, synthesis_count: int,
     # Stack the arrays
     ma_arrs = np.ma.stack(tuple(ma_arrs))
     syns = scattering.synthesis(synth_style, ma_arrs, seed=0,
-                                ensemble=True, N_ensemble=N,
+                                ensemble=True, N_ensemble=synthesis_count,
                                 print_each_step=True)
     return syns
 
