@@ -1,7 +1,7 @@
 import os
 import json
-import numpy as np
 from PIL import Image
+import numpy as np
 import fire
 
 # Hack to import scattering
@@ -9,55 +9,11 @@ import sys
 sys.path.append('./scattering_transform')
 import scattering
 
+from . import utils
+
 
 # NOTE: Kept for convenience
 # IMAGE_PATH = '/home/nsulmol/.local/share/label-studio/media/upload/1'
-
-
-def normalize_image(arr: np.array) -> np.array:
-    """Min-max normalize an image."""
-    arr = (arr - np.min(arr)) / (np.max(arr) - np.min(arr))
-    return arr
-
-
-def convert_to_float(arr: np.array) -> np.array:
-    """Convert arr to float."""
-    return arr.astype(float)  # Convert to float
-
-
-def convert_to_uint16(arr: np.array) -> np.array:
-    """Convert array back to uint, scaling accordingly."""
-    arr = arr * 65535  # HARD-CODED VALUE!!!
-    return arr.astype(np.uint16)
-
-
-def get_images_filepaths(path: str, ext: str = None) -> list[str]:
-    """Given a directory and extension, extract list of image filepaths."""
-    files = [os.path.join(path, f) for f in os.listdir(path) if
-             os.path.isfile(os.path.join(path, f))]
-    if ext:
-        files = [f for f in files if ext in f]
-    return files
-
-
-def load_images_from_dir(path: str, ext: str = None) -> list[np.array]:
-    """ Loads all images in a directory, normalizes, and returns."""
-    file_list = get_images_filepaths(path, ext)
-    return load_images_from_file_list(file_list)
-
-
-def load_images_from_file_list(filepaths: list[str]) -> list[np.array]:
-    # Load and convert to numpy
-    arrs = []
-    for f in filepaths:
-        img_src = Image.open(f)
-        img_src = np.array(img_src)
-
-        # Whiten before normalizing...
-        img_src = scattering.whiten(img_src[np.newaxis, ...])[0, ...]
-        img_src = normalize_image(img_src)
-        arrs.append(img_src)
-    return arrs
 
 
 def load_labels_images(fname: str, img_path: str
@@ -101,7 +57,7 @@ def load_labels_images(fname: str, img_path: str
             img_labels.append(x1x2y1y2)
         total_labels.append(img_labels)
 
-    arrs = load_images_from_file_list(filepaths)
+    arrs = utils.load_images_from_file_list(filepaths)
     return total_labels, arrs
 
 
@@ -127,34 +83,18 @@ def mask_images(arrs: list[np.array], total_labels: list[list[int, int, int, int
     return masked_arrs
 
 
-def extract_objects(arrs: list[np.array], total_labels: list[list[int, int, int, int]]
-                ) -> list[np.array]:
+def extract_objects(arrs: list[np.array],
+                    total_labels: list[list[int, int, int, int]]
+                    ) -> list[np.array]:
     """Exctract labeled objects from all provided arrays and save as list."""
     assert len(arrs) == len(total_labels)
 
     objects = []
     for arr, labels in zip(arrs, total_labels):
-        arr_shape = arr.shape
         for label in labels:
             # label: x1x2y1y2
             objects.append(arr[label[2]:label[3], label[0]:label[1]])
     return objects
-
-
-def save_arrs(arrs: list[np.array], path: str, ext: str):
-    """Save a list of numpy arrays to directory path with extension ext."""
-    for i in range(0, len(arrs)):
-        tmp = convert_to_uint16(arrs[i])
-        tmp = Image.fromarray(tmp)
-        tmp.save(os.path.join(path, str(i) + ext))
-
-
-def save_arr_stack_as_arrs(arrs: np.array, path: str, ext: str):
-    """Save a numpy array stack in directory path with extension ext."""
-    for i in range(0, arrs.shape[0]):
-        tmp = convert_to_uint16(arrs[i, ...])
-        tmp = Image.fromarray(tmp)
-        tmp.save(os.path.join(path, str(i) + ext))
 
 
 def synthesize_images_only(img_dir: str, synthesis_count: int,
@@ -171,7 +111,7 @@ def synthesize_images_only(img_dir: str, synthesis_count: int,
     Returns:
         synthesized images.
     """
-    arrs = load_images_from_dir(img_dir, img_ext)
+    arrs = utils.load_images_from_dir(img_dir, img_ext)
     arrs = np.ma.stack(tuple(arrs))
     syns = scattering.synthesis(synth_style, arrs, seed=0,
                                 ensemble=True, N_ensemble=synthesis_count,
@@ -222,7 +162,7 @@ def synthesize_save_images(json_path: str, img_dir: str, synthesis_count: int,
         img_ext: image file extension, for saving.
     """
     syns = synthesize_images(json_path, img_dir, synthesis_count, synth_style)
-    save_arr_stack_as_arrs(syns, synth_dir, img_ext)
+    utils.save_arr_stack_as_arrs(syns, synth_dir, img_ext)
 
 
 def synthesize_save_images_only(img_dir: str, synthesis_count: int,
@@ -239,7 +179,7 @@ def synthesize_save_images_only(img_dir: str, synthesis_count: int,
         img_ext: image file extension, for filtering from img_dir and saving.
     """
     syns = synthesize_images_only(img_dir, synthesis_count, synth_style, img_ext)
-    save_arr_stack_as_arrs(syns, synth_dir, img_ext)
+    utils.save_arr_stack_as_arrs(syns, synth_dir, img_ext)
 
 
 def save_objects_from_images(json_path: str, img_dir: str, out_dir: str,
@@ -257,7 +197,7 @@ def save_objects_from_images(json_path: str, img_dir: str, out_dir: str,
     """
     total_labels, arrs = load_labels_images(json_path, img_dir)
     objects = extract_objects(arrs, total_labels)
-    save_arrs(objects, out_dir, img_ext)
+    utils.save_arrs(objects, out_dir, img_ext)
 
 
 if __name__ == '__main__':
