@@ -104,9 +104,40 @@ def extract_objects(arrs: list[np.array],
     return objects
 
 
+def _synth_images(arrs: list[np.ndarray], synthesis_count: int,
+                  synth_style: str = 's_cov',
+                  batch_size: int = None) -> list[np.ndarray]:
+    """Synthesis images. Performs n-to-n' from Scattering.
+
+    Args:
+        arrs: list of arrays to evaluate for synthesis.
+        synthesis_count: how many images to synthesize.
+        synth_style: str indicating the style of analysis used for synthesis.
+        batch_size: provide a count to bundle or batch synthesis runs in.
+            Useful if you need to synthesize a larger amount than your compute
+            memory allows.
+    """
+    syns = []
+    if batch_size:
+        while synthesis_count >= batch_size:
+            synthesis_count -= batch_size
+            syns.append(
+                scattering.synthesis(synth_style, arrs, seed=0,
+                                     ensemble=True,
+                                     N_ensemble=batch_size,
+                                     print_each_step=True))
+
+    syns.append(
+        scattering.synthesis(synth_style, arrs, seed=0,
+                             ensemble=True, N_ensemble=synthesis_count,
+                             print_each_step=True))
+    return syns
+
+
 def synthesize_images_only(img_dir: str, synthesis_count: int,
                            synth_style: str = 's_cov',
-                           img_ext: str = '.png') -> np.array:
+                           img_ext: str = '.png',
+                           batch_size: int = None) -> np.array:
     """Analyze images and synthesize samples.
 
     Args:
@@ -114,6 +145,9 @@ def synthesize_images_only(img_dir: str, synthesis_count: int,
         synthesis_count: how many images to synthesize.
         img_ext: image file extension, for filtering from img_dir.
         synth_style: str indicating the style of analysis used for synthesis.
+        batch_size: provide a count to bundle or batch synthesis runs in.
+            Useful if you need to synthesize a larger amount than your compute
+            memory allows.
 
     Returns:
         synthesized images.
@@ -125,14 +159,12 @@ def synthesize_images_only(img_dir: str, synthesis_count: int,
     else:
         arrs = np.stack(tuple(arrs))
 
-    syns = scattering.synthesis(synth_style, arrs, seed=0,
-                                ensemble=True, N_ensemble=synthesis_count,
-                                print_each_step=True)
-    return syns
+    return _synth_images(arrs, synthesis_count, synth_style, batch_size)
 
 
 def synthesize_images(json_path: str, img_dir: str, synthesis_count: int,
-                      synth_style: str = 's_cov') -> np.array:
+                      synth_style: str = 's_cov', batch_size: int = None
+                      ) -> np.array:
     """Analyze images with labels removed and synthesize samples.
 
     Args:
@@ -142,6 +174,9 @@ def synthesize_images(json_path: str, img_dir: str, synthesis_count: int,
             in the JSON file.
         synthesis_count: how many images to synthesize.
         synth_style: str indicating the style of analysis used for synthesis.
+        batch_size: provide a count to bundle or batch synthesis runs in.
+            Useful if you need to synthesize a larger amount than your compute
+            memory allows.
 
     Returns:
         synthesized images.
@@ -156,15 +191,12 @@ def synthesize_images(json_path: str, img_dir: str, synthesis_count: int,
     else:
         ma_arrs = np.stack(tuple(ma_arrs))
 
-    syns = scattering.synthesis(synth_style, ma_arrs, seed=0,
-                                ensemble=True, N_ensemble=synthesis_count,
-                                print_each_step=True)
-    return syns
+    return _synth_images(ma_arrs, synthesis_count, synth_style, batch_size)
 
 
 def synthesize_save_images(json_path: str, img_dir: str, synthesis_count: int,
                            synth_dir: str, synth_style: str = 's_cov',
-                           img_ext: str = '.png'):
+                           img_ext: str = '.png', batch_size: int = None):
     """Analyze images with labels removed, synthesize samples and save.
 
     Args:
@@ -177,14 +209,18 @@ def synthesize_save_images(json_path: str, img_dir: str, synthesis_count: int,
             saved.
         synth_style: str indicating the style of analysis used for synthesis.
         img_ext: image file extension, for saving.
+        batch_size: provide a count to bundle or batch synthesis runs in.
+            Useful if you need to synthesize a larger amount than your compute
+            memory allows.
     """
-    syns = synthesize_images(json_path, img_dir, synthesis_count, synth_style)
+    syns = synthesize_images(json_path, img_dir, synthesis_count, synth_style,
+                             batch_size)
     utils.save_arr_stack_as_arrs(syns, synth_dir, img_ext)
 
 
 def synthesize_save_images_only(img_dir: str, synthesis_count: int,
                                 synth_dir: str, synth_style: str = 's_cov',
-                                img_ext: str = '.png'):
+                                img_ext: str = '.png', batch_size: int = None):
     """Analyze images, synthesize samples and save.
 
     Args:
@@ -194,8 +230,12 @@ def synthesize_save_images_only(img_dir: str, synthesis_count: int,
             saved.
         synth_style: str indicating the style of analysis used for synthesis.
         img_ext: image file extension, for filtering from img_dir and saving.
+        batch_size: provide a count to bundle or batch synthesis runs in.
+            Useful if you need to synthesize a larger amount than your compute
+            memory allows.
     """
-    syns = synthesize_images_only(img_dir, synthesis_count, synth_style, img_ext)
+    syns = synthesize_images_only(img_dir, synthesis_count, synth_style,
+                                  img_ext, batch_size)
     utils.save_arr_stack_as_arrs(syns, synth_dir, img_ext)
 
 
