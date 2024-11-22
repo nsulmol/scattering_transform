@@ -21,8 +21,10 @@ def convert_to_float(arr: np.array) -> np.array:
 
 def convert_to_uint16(arr: np.array) -> np.array:
     """Convert array back to uint, scaling accordingly."""
-    arr = arr * 65535  # HARD-CODED VALUE!!!
-    return arr.astype(np.uint16)
+    norm_arr = scattering.whiten(arr[np.newaxis, ...])[0, ...]
+    norm_arr = normalize_image(arr)
+    norm_arr = norm_arr * 65535  # HARD-CODED VALUE
+    return norm_arr.astype(np.uint16)
 
 
 def get_images_filepaths(path: str, ext: str = None) -> list[str]:
@@ -62,17 +64,20 @@ def load_images_from_file_list(filepaths: list[str]) -> list[np.array]:
     return [load_image(f) for f in filepaths]
 
 
+def save_arr(arr: np.array, filename: str):
+    """Save an individual array to filename."""
+    tmp = convert_to_uint16(arr)
+    tmp = Image.fromarray(tmp)
+    tmp.save(filename)
+
+
 def save_arrs(arrs: list[np.array], path: str, ext: str):
     """Save a list of numpy arrays to directory path with extension ext."""
     for i in range(0, len(arrs)):
-        tmp = convert_to_uint16(arrs[i])
-        tmp = Image.fromarray(tmp)
-        tmp.save(os.path.join(path, str(i) + ext))
+        save_arr(arrs[i], os.path.join(path, str(i) + ext))
 
 
 def save_arr_stack_as_arrs(arrs: np.array, path: str, ext: str):
     """Save a numpy array stack in directory path with extension ext."""
     for i in range(0, arrs.shape[0]):
-        tmp = convert_to_uint16(arrs[i, ...])
-        tmp = Image.fromarray(tmp)
-        tmp.save(os.path.join(path, str(i) + ext))
+        save_arr(arrs[i, ...], os.path.join(path, str(i) + ext))
