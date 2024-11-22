@@ -84,17 +84,8 @@ def mask_images(arrs: list[np.array],
         # NOTE: torch's MaskedTensor and Complex do not mix well.
         # As a workaround, we are doing inpainting of the image around the
         # masked parts.
-
         inpainted = skimage.restoration.inpaint_biharmonic(ma_arr.data,
                                                            ma_arr.mask)
-
-        # ---- RECONSTRUCTION ---- #
-        # seed = ma_arr.filled(fill_value=0.0)
-        # reconstruction_mask = 0.5 * np.ones(ma_arr.shape, ma_arr.dtype)
-        # reconstruction_mask = ma_arr.filled(fill_value=0.25)
-        # reconstructed = reconstruction(seed, reconstruction_mask)
-        # ---- END RECONSTRUCTION ---- #
-
         masked_arrs.append(inpainted)
     return masked_arrs
 
