@@ -110,27 +110,37 @@ def _synth_images(arrs: list[np.ndarray], synthesis_count: int,
     """Synthesis images. Performs n-to-n' from Scattering.
 
     Args:
-        arrs: list of arrays to evaluate for synthesis.
+        arrs: list of np arrays to evaluate for synthesis.
         synthesis_count: how many images to synthesize.
         synth_style: str indicating the style of analysis used for synthesis.
         batch_size: provide a count to bundle or batch synthesis runs in.
             Useful if you need to synthesize a larger amount than your compute
             memory allows.
     """
+    arr_stack = utils.stack_images(arrs)
+
     syns = []
+    i = 0
     if batch_size:
         while synthesis_count >= batch_size:
+            print(f'Synthesizing batch {i}')
             synthesis_count -= batch_size
             syns.append(
-                scattering.synthesis(synth_style, arrs, seed=0,
+                scattering.synthesis(synth_style, arr_stack, seed=0,
                                      ensemble=True,
                                      N_ensemble=batch_size,
                                      print_each_step=True))
+            i += 1
 
-    syns.append(
-        scattering.synthesis(synth_style, arrs, seed=0,
-                             ensemble=True, N_ensemble=synthesis_count,
-                             print_each_step=True))
+    if synthesis_count > 0:
+        print(f'Synthesizing batch {i}')
+        syns.append(
+            scattering.synthesis(synth_style, arr_stack, seed=0,
+                                 ensemble=True, N_ensemble=synthesis_count,
+                                 print_each_step=True))
+
+    # Return to array stack
+    syns = np.concatenate(tuple(syns))
     return syns
 
 
@@ -153,12 +163,6 @@ def synthesize_images_only(img_dir: str, synthesis_count: int,
         synthesized images.
     """
     arrs = utils.load_images_from_dir(img_dir, img_ext)
-
-    if type(arrs[0]) is np.ma.MaskedArray:
-        arrs = np.ma.stack(tuple(arrs))
-    else:
-        arrs = np.stack(tuple(arrs))
-
     return _synth_images(arrs, synthesis_count, synth_style, batch_size)
 
 
@@ -183,14 +187,6 @@ def synthesize_images(json_path: str, img_dir: str, synthesis_count: int,
     """
     total_labels, arrs = load_labels_images(json_path, img_dir)
     ma_arrs = mask_images(arrs, total_labels)
-
-    # Stack the arrays
-    # NOTE: Switching from masked array to arr due to torch support issues.
-    if type(ma_arrs[0]) is np.ma.MaskedArray:
-        ma_arrs = np.ma.stack(tuple(ma_arrs))
-    else:
-        ma_arrs = np.stack(tuple(ma_arrs))
-
     return _synth_images(ma_arrs, synthesis_count, synth_style, batch_size)
 
 

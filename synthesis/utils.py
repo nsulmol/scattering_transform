@@ -81,3 +81,13 @@ def save_arr_stack_as_arrs(arrs: np.array, path: str, ext: str):
     """Save a numpy array stack in directory path with extension ext."""
     for i in range(0, arrs.shape[0]):
         save_arr(arrs[i, ...], os.path.join(path, str(i) + ext))
+
+
+def stack_images(arrs: list[np.ndarray | np.ma.MaskedArray]
+                 ) -> np.ndarray | np.ma.MaskedArray:
+    """From list of B (N, M) arrs to a single (B, N, M) one."""
+    if type(arrs[0]) is np.ma.MaskedArray:
+        arrs = np.ma.stack(tuple(arrs))
+    else:
+        arrs = np.stack(tuple(arrs))
+    return arrs
