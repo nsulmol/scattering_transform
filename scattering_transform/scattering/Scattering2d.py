@@ -3,6 +3,26 @@ import torch
 import torch.fft
 from scattering.FiltersSet import FiltersSet
 
+
+def handle_masked_array(arr: np.ma.MaskedArray | np.ndarray
+                        ) -> torch.masked.MaskedTensor | torch.Tensor:
+    """Checks if arr is masked_array and creates a MaskedTensor if so."""
+    target = torch.from_numpy(arr)
+
+    if type(arr) == np.ma.MaskedArray:
+        # # Note: torch's MaskedTensor and Complex do not mix well.
+        # We will throw an error if you try to use it.
+        text = ('torch does not support MaskedTensor with Complex functions.' +
+                ' Exiting.')
+        printf(text)
+        raise TypeError(text)
+
+        # 'Proper' logic (if MaskedTensor and Complex worked together).
+        # mask = torch.from_numpy(arr.mask)
+        # target = torch.masked.as_masked_tensor(target, mask)
+    return target
+
+
 class Scattering2d(object):
     def __init__(
         self, M, N, J, L=4, device='gpu', 
@@ -177,7 +197,7 @@ class Scattering2d(object):
 
         # convert numpy array input into torch tensors
         if type(data) == np.ndarray or type(data) == np.ma.MaskedArray:
-            data = torch.from_numpy(data)
+            data = handle_masked_array(data)
 
         # initialize tensors for scattering coefficients
         S0 = torch.zeros((N_image,1), dtype=data.dtype)
@@ -326,7 +346,7 @@ class Scattering2d(object):
 
         # convert numpy array input into torch tensors
         if type(data) == np.ndarray or type(data) == np.ma.MaskedArray:
-            data = torch.from_numpy(data)
+            data = handle_masked_array(data)
 
         # initialize tensors for scattering coefficients
         S0 = torch.zeros((N_image,1), dtype=data.dtype)
@@ -633,8 +653,8 @@ class Scattering2d(object):
 
         # convert numpy array input into torch tensors
         if type(data) == np.ndarray or type(data) == np.ma.MaskedArray:
-            data = torch.from_numpy(data)
-            
+            data = handle_masked_array(data)
+
         if self.device=='gpu':
             data = data.cuda()
         data_f = torch.fft.fftn(data, dim=(-2,-1))
@@ -871,10 +891,10 @@ class Scattering2d(object):
         
         # convert numpy array input into torch tensors
         if type(data_a) == np.ndarray or type(data_a) == np.ma.MaskedArray:
-            data_a = torch.from_numpy(data_a)
+            data_a = handle_masked_array(data_a)
         if type(data_b) == np.ndarray or type(data_b) == np.ma.MaskedArray:
-            data_b = torch.from_numpy(data_b)
-            
+            data_b = handle_masked_array(data_b)
+
         if self.device=='gpu':
             data_a = data_a.cuda()
             data_b = data_b.cuda()
@@ -1176,7 +1196,7 @@ class Scattering2d(object):
 
         # convert numpy array input into torch tensors
         if type(data) == np.ndarray or type(data) == np.ma.MaskedArray:
-            data = torch.from_numpy(data)
+            data = handle_masked_array(data)
 
         # move torch tensors to gpu device, if required
         if self.device=='gpu':

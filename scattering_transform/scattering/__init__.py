@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 
 from scattering.utils import to_numpy
 from scattering.FiltersSet import FiltersSet
-from scattering.Scattering2d import Scattering2d
+from scattering.Scattering2d import Scattering2d, handle_masked_array
 from scattering.polyspectra_calculators import get_power_spectrum, Bispectrum_Calculator, Trispectrum_Calculator
 from scattering.AlphaScattering2d_cov import AlphaScattering2d_cov
 from scattering.angle_transforms import FourierAngle
@@ -293,9 +293,10 @@ def synthesis_general(
     
     # formating target and image_init (to tensor, to cuda)
     if type(target)==np.ndarray or type(target) == np.ma.MaskedArray:
-        target = torch.from_numpy(target)
+        target = handle_masked_array(target)
+
     if type(image_init)==np.ndarray or type(image_init) == np.ma.MaskedArray:
-        image_init = torch.from_numpy(image_init)
+        image_init = handle_masked_array(image_init)
     if precision=='double':
         target = target.type(torch.DoubleTensor)
         image_init = image_init.type(torch.DoubleTensor)
@@ -822,7 +823,7 @@ def convolve_by_FFT(field, func_in_Fourier, device='cpu'):
     get the power spectrum of a given image
     '''
     if type(field) == np.ndarray or type(field) == np.ma.MaskedArray:
-        field = torch.from_numpy(field)
+        field = handle_masked_array(field)
     M, N = field.shape[-2:]
     field_f = torch.fft.fftn(field, dim=(-2,-1))
     
