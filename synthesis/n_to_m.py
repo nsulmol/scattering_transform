@@ -1,6 +1,5 @@
 import os
 import json
-from PIL import Image
 import numpy as np
 import fire
 
@@ -9,7 +8,8 @@ import sys
 sys.path.append('./scattering_transform')
 import scattering
 
-from . import utils
+from synthesis import utils
+import skimage
 
 
 # NOTE: Kept for convenience
@@ -61,7 +61,8 @@ def load_labels_images(fname: str, img_path: str
     return total_labels, arrs
 
 
-def mask_images(arrs: list[np.array], total_labels: list[list[int, int, int, int]]
+def mask_images(arrs: list[np.array],
+                total_labels: list[list[int, int, int, int]]
                 ) -> list[np.array]:
     """Mask out labels from all provided arrays.
 
@@ -79,7 +80,22 @@ def mask_images(arrs: list[np.array], total_labels: list[list[int, int, int, int
             # label: x1x2y1y2
             # Set this label to True (which removes it from masked_array).
             ma_arr.mask[label[2]:label[3], label[0]:label[1]] = True
-        masked_arrs.append(ma_arr)
+
+        # NOTE: torch's MaskedTensor and Complex do not mix well.
+        # As a workaround, we are doing inpainting of the image around the
+        # masked parts.
+
+        inpainted = skimage.restoration.inpaint_biharmonic(ma_arr.data,
+                                                           ma_arr.mask)
+
+        # ---- RECONSTRUCTION ---- #
+        # seed = ma_arr.filled(fill_value=0.0)
+        # reconstruction_mask = 0.5 * np.ones(ma_arr.shape, ma_arr.dtype)
+        # reconstruction_mask = ma_arr.filled(fill_value=0.25)
+        # reconstructed = reconstruction(seed, reconstruction_mask)
+        # ---- END RECONSTRUCTION ---- #
+
+        masked_arrs.append(inpainted)
     return masked_arrs
 
 
@@ -112,7 +128,12 @@ def synthesize_images_only(img_dir: str, synthesis_count: int,
         synthesized images.
     """
     arrs = utils.load_images_from_dir(img_dir, img_ext)
-    arrs = np.ma.stack(tuple(arrs))
+
+    if type(arrs[0]) is np.ma.MaskedArray:
+        arrs = np.ma.stack(tuple(arrs))
+    else:
+        arrs = np.stack(tuple(arrs))
+
     syns = scattering.synthesis(synth_style, arrs, seed=0,
                                 ensemble=True, N_ensemble=synthesis_count,
                                 print_each_step=True)
@@ -138,7 +159,12 @@ def synthesize_images(json_path: str, img_dir: str, synthesis_count: int,
     ma_arrs = mask_images(arrs, total_labels)
 
     # Stack the arrays
-    ma_arrs = np.ma.stack(tuple(ma_arrs))
+    # NOTE: Switching from masked array to arr due to torch support issues.
+    if type(ma_arrs[0]) is np.ma.MaskedArray:
+        ma_arrs = np.ma.stack(tuple(ma_arrs))
+    else:
+        ma_arrs = np.stack(tuple(ma_arrs))
+
     syns = scattering.synthesis(synth_style, ma_arrs, seed=0,
                                 ensemble=True, N_ensemble=synthesis_count,
                                 print_each_step=True)
