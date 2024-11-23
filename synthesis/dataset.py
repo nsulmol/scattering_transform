@@ -189,7 +189,7 @@ def image_copy_paste(img, paste_img, alpha, blend=True, sigma=1):
     """
     if alpha is not None:
         if blend:
-            alpha = gaussian(alpha, sigma=sigma, preserve_range=True)
+            alpha = gaussian(alpha, sigma=sigma, preserve_range=False)
 
         img_dtype = img.dtype
         img = paste_img * alpha + img * (1 - alpha)
