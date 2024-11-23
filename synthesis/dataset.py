@@ -1,23 +1,19 @@
-import os
 import numpy as np
 import torch
 from torch.utils.data import Dataset
 from torchvision import tv_tensors
-# from torchvision.io import read_image
-from torchvision.ops.boxes import masks_to_boxes
-from torchvision.transforms.v2 import functional as F
 import albumentations as A
 import random
-from skimage.filters import gaussian  # TODO: Consider replacing
+from skimage.filters import gaussian
 
-from . import utils
+from synthesis import utils
 
 
 class SyntheticSPMDataset(Dataset):
-    """ Dataset from merging synthesized 'surfaces' with objects of interest.
+    """Dataset from merging synthesized 'surfaces' with objects of interest.
 
     Given a set of synthesized surface images and extracted objects of interest
-    (with their masks), we create synthetic images by:
+    we create synthetic images by:
     - Choosing a random number of objects to copy-paste onto the surface of
     size <= max_objects, and:
         * Selecting a randomized set of these objects that matches the number.
@@ -31,7 +27,8 @@ class SyntheticSPMDataset(Dataset):
         (i.e. no intersections).
     - Choosing a random surface and copy-pasting the combined objects image
     onto it (only the masked proportions corresponding to the objects). For
-    this, we copy logic from NAME THIS PROJECT.
+    this, we copy logic from conradry/copy-paste-aug to blend the images via
+    a Gaussian blur (I think).
 
     Note: for now, we are only considering a single class of objects!
 
@@ -40,16 +37,16 @@ class SyntheticSPMDataset(Dataset):
         object_filepaths: list of paths to object files.
         max_objects: maximum number of objects to superimpose on a surface
             per item.
-        final_transform: additional ablumentation transform to perform on
+        transform: additional ablumentation transform to perform on
             image after creating it.
         object_transform: ablumentation transform to perform on objects to
             rotate, scale, and translate them in the image.
     """
 
-    def __init__(self, surfaces_dir: str, objects_dir: str,  # masks_dir: str,
+    def __init__(self, surfaces_dir: str, objects_dir: str,
                  max_objects: int, object_scale_limit: tuple[float, float],
-                 object_rot_limit: tuple([int, int]),
-                 transform: A.Transform = None,
+                 object_rot_limit: tuple[int, int],
+                 transform: A.core.composition.TransformType = None,
                  img_ext: str = None):
         """Initialize synthetic SPM dataset.
 
@@ -71,13 +68,12 @@ class SyntheticSPMDataset(Dataset):
                                                             img_ext)
         self.object_filepaths = utils.get_images_filepaths(objects_dir,
                                                            img_ext)
-        # self.masks_dir = masks_dir  # TODO: Remove me?
         self.max_objects = max_objects
-        self.final_transform = transform
-        self.object_transform = A.ShiftScaleRotate(
-            shift_limit=[0.0, 1.0],
-            scale_limit=object_scale_limit,
-            rotate_limit=object_rot_limit)
+        self.transform = transform
+        self.object_transform = A.Affine(
+            translate_percent=[-0.4, 0.4],  # TODO: Try [-0.5, 0.5]?
+            scale=object_scale_limit,
+            rotate=object_rot_limit, p=1.0, keep_ratio=True)
 
     def __len__(self):
         return len(self.surface_filepaths)
@@ -87,7 +83,9 @@ class SyntheticSPMDataset(Dataset):
         objects, masks = self.prepare_objects_and_masks(objects, surface.shape)
 
         # Create compound obj and mask from all objects and masks.
-        compound_obj, compound_mask = merge_objects(objects, masks)
+        compound_obj, compound_mask = merge_objects(objects, masks,
+                                                    surface.shape,
+                                                    surface.dtype)
 
         # Create combined image (surface + objects)
         image = image_copy_paste(surface, compound_obj, compound_mask)
@@ -117,11 +115,12 @@ class SyntheticSPMDataset(Dataset):
         return surface, objects
 
     def prepare_objects_and_masks(self, objects: list[np.array],
-                                  shape: tuple(int, int)
-                                  ) -> (list[np.array], list[np.array]):
+                                  shape: tuple[int, int]
+                                  ) -> tuple[list[np.array], list[np.array]]:
         """Expand objects to shape and rotate/translate/scale randomly."""
         obj_mask_tuples = [create_widened_object_and_mask(obj, shape)
                            for obj in objects]
+
         objects = [obj_mask[0] for obj_mask in obj_mask_tuples]
         masks = [obj_mask[1] for obj_mask in obj_mask_tuples]
 
@@ -157,27 +156,40 @@ def get_target_dict_from_data(objects: list[np.array], masks: list[np.array],
         - 'masks': torchvision.tv_tensors.Mask of shape [N, H, W] with
         segmentation masks for each object.
     """
-
     # Extract bounding boxes ???
-    # boxes = [bounding_box_from_mask(mask) for mask in masks]
-    boxes = [masks_to_boxes(mask) for mask in masks]
-    boxes = torch.cat(boxes)  # Concatenate all masks
-    num_objs = boxes.shape(0)
+    boxes = [bounding_box_from_mask(mask) for mask in masks]
+    # masks = [torch.from_numpy(mask) for mask in masks]
+    # boxes = masks_to_boxes(masks)  #[masks_to_boxes(mask) for mask in masks]
+
+    num_objs = len(boxes)
 
     # there is only one class
     labels = torch.ones((num_objs,), dtype=torch.int64)
 
     # Get areas for each box
-    area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
+    boxes = np.array(boxes)  # TODO: hack?
+
+    if len(boxes) > 0:
+        area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
+    else:
+        area = np.zeros((0, 4))
 
     # suppose all instances are not crowd
     iscrowd = torch.zeros((num_objs,), dtype=torch.int64)
 
+    # TODO: re-think!
+    # Convert boxes to torch format for output?
+    # boxes = [torch.Tensor(box) for box in boxes]
+    # boxes = torch.cat(boxes)  # Concatenate all masks
+    boxes = torch.from_numpy(boxes)
+
     # Package up data in dict and send out
     target = {}
-    target["boxes"] = tv_tensors.BoundingBoxes(boxes, format="XYXY",
-                                               canvas_size=F.get_size(img))
-    target["masks"] = tv_tensors.Mask(masks)
+    # target["boxes"] = tv_tensors.BoundingBoxes(boxes, format="XYXY",
+    #                                            canvas_size=F.get_size(masks[0]))
+    target['boxes'] = boxes
+    # target["masks"] = tv_tensors.Mask(masks)
+    target['masks'] = masks
     target["labels"] = labels
     target["image_id"] = image_idx
     target["area"] = area
@@ -187,8 +199,9 @@ def get_target_dict_from_data(objects: list[np.array], masks: list[np.array],
 
 
 def image_copy_paste(img, paste_img, alpha, blend=True, sigma=1):
-    """TAKEN FROM conradry/copy-paste-aug on github.
+    """Merge two images via a copy-paste action.
 
+    Taken conradry/copy-paste-aug on github.
     Here, alpha is presumably the combined mask?
     """
     if alpha is not None:
@@ -196,7 +209,7 @@ def image_copy_paste(img, paste_img, alpha, blend=True, sigma=1):
             alpha = gaussian(alpha, sigma=sigma, preserve_range=True)
 
         img_dtype = img.dtype
-        alpha = alpha[..., None]
+        # alpha = alpha[..., None]  # TODO: undo when testing batches!!
         img = paste_img * alpha + img * (1 - alpha)
         img = img.astype(img_dtype)
 
@@ -204,30 +217,50 @@ def image_copy_paste(img, paste_img, alpha, blend=True, sigma=1):
 
 
 def create_widened_object_and_mask(obj: np.array,
-                                   shape: tuple(int, int)
-                                   ) -> tuple(np.array, np.array):
+                                   shape: tuple[int, int]
+                                   ) -> tuple[np.array, np.array]:
     """Expand arr right and down with zeros, and create mask."""
-    bigger_obj = np.zeros(shape, obj.dtype)
-    bigger_obj[0:obj.shape[0], 0:obj.shape[1]] = obj
-    mask = np.zeros(shape, obj.dtype)
-    mask[0:obj.shape[0], 0:obj.shape[1]] = 1  # True
-    return bigger_obj, mask
+    total_padding = np.array(shape) - np.array(obj.shape)
+    pad = total_padding // 2
+    nudge = total_padding - 2*pad
+
+    mask = np.ones(obj.shape, obj.dtype)
+
+    # Expand
+    y_pad = (pad[0], pad[0] + nudge[0])
+    x_pad = (pad[1], pad[1] + nudge[1])
+
+    obj = np.pad(obj, [y_pad, x_pad], mode='constant', constant_values=0)
+    mask = np.pad(mask, [y_pad, x_pad], mode='constant', constant_values=0)
+    return obj, mask
 
 
-def merge_objects(objects: list[np.array], masks: list[np.array]
-                  ) -> tuple(np.array, np.array):
+def merge_objects(objects: list[np.array], masks: list[np.array],
+                  shape: tuple[int, int], dtype) -> tuple[np.array, np.array]:
     """Merge all objects and masks into a single object and mask."""
+    assert len(objects) == len(masks)
+
+    # Handle no objects being provided
+    if len(objects) == 0:
+        final_obj = np.zeros(shape, dtype)
+        final_mask = np.zeros(shape, dtype)
+        return final_obj, final_mask
+
     final_obj = objects[0]
     final_mask = masks[0]
 
     for obj, mask in zip(objects[1:], masks[1:]):
-        # Logical NOR between final mask and current.
-        # (This is a flipped AND, because in np.ma 1 means don't consider).
-        final_mask = ~np.logical_or(final_mask, mask)
+        # temporary mask is to avoid intersections between compound image
+        # and new obj being added.
+        tmp_mask = (mask - np.logical_and(final_mask, mask)).astype(np.bool)
+        # final mask is just a logical or of all masks together.
+        final_mask = np.logical_or(final_mask, mask)
+
         # Add only the masked portions between combined obj and
-        # current obj.
-        final_obj = np.ma.masked_array(final_obj.data, obj.data,
-                                        final_mask).data
+        # current obj. Note mask inversion to match masked_array expectations.
+        only_obj = np.ma.masked_array(obj, ~tmp_mask).filled(fill_value=0)
+
+        final_obj = final_obj + only_obj
     return final_obj, final_mask
 
 
@@ -244,4 +277,6 @@ def bounding_box_from_mask(mask: np.array) -> list[int, int, int, int]:
     cols = np.any(mask, axis=0)
     rmin, rmax = np.where(rows)[0][[0, -1]]
     cmin, cmax = np.where(cols)[0][[0, -1]]
-    return cmin, rmin, cmax, rmax
+
+    box = [cmin, rmin, cmax, rmax]
+    return box
