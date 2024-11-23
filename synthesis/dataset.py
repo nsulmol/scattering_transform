@@ -1,7 +1,6 @@
 import numpy as np
 import torch
 from torch.utils.data import Dataset
-from torchvision import tv_tensors
 import albumentations as A
 import random
 from skimage.filters import gaussian
@@ -71,7 +70,7 @@ class SyntheticSPMDataset(Dataset):
         self.max_objects = max_objects
         self.transform = transform
         self.object_transform = A.Affine(
-            translate_percent=[-0.4, 0.4],  # TODO: Try [-0.5, 0.5]?
+            translate_percent=[-0.5, 0.5],
             scale=object_scale_limit,
             rotate=object_rot_limit, p=1.0, keep_ratio=True)
 
@@ -94,8 +93,6 @@ class SyntheticSPMDataset(Dataset):
         if self.transform:
             image = self.transform(image)
 
-        # Wrap sample and targets into torchvision tv_tensors:
-        image = tv_tensors.Image(image)
         target = get_target_dict_from_data(objects, masks, idx)
         return image, target
 
@@ -107,10 +104,7 @@ class SyntheticSPMDataset(Dataset):
                             for obj in range(num_objects)]
 
         surface = utils.load_image(surface_path)
-        # surface = read_image(surface_path)
-
         objects = [utils.load_image(path) for path in object_filepaths]
-        #objects = [read_image(path) for path in object_filepaths]
 
         return surface, objects
 
@@ -158,37 +152,26 @@ def get_target_dict_from_data(objects: list[np.array], masks: list[np.array],
     """
     # Extract bounding boxes ???
     boxes = [bounding_box_from_mask(mask) for mask in masks]
-    # masks = [torch.from_numpy(mask) for mask in masks]
-    # boxes = masks_to_boxes(masks)  #[masks_to_boxes(mask) for mask in masks]
-
     num_objs = len(boxes)
 
-    # there is only one class
-    labels = torch.ones((num_objs,), dtype=torch.int64)
-
-    # Get areas for each box
-    boxes = np.array(boxes)  # TODO: hack?
-
-    if len(boxes) > 0:
+    boxes = np.array(boxes)
+    if num_objs > 0:
         area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
     else:
         area = np.zeros((0, 4))
 
+    # there is only one class
+    labels = torch.ones((num_objs,), dtype=torch.int64)
+
     # suppose all instances are not crowd
     iscrowd = torch.zeros((num_objs,), dtype=torch.int64)
 
-    # TODO: re-think!
     # Convert boxes to torch format for output?
-    # boxes = [torch.Tensor(box) for box in boxes]
-    # boxes = torch.cat(boxes)  # Concatenate all masks
     boxes = torch.from_numpy(boxes)
 
     # Package up data in dict and send out
     target = {}
-    # target["boxes"] = tv_tensors.BoundingBoxes(boxes, format="XYXY",
-    #                                            canvas_size=F.get_size(masks[0]))
     target['boxes'] = boxes
-    # target["masks"] = tv_tensors.Mask(masks)
     target['masks'] = masks
     target["labels"] = labels
     target["image_id"] = image_idx
@@ -209,7 +192,6 @@ def image_copy_paste(img, paste_img, alpha, blend=True, sigma=1):
             alpha = gaussian(alpha, sigma=sigma, preserve_range=True)
 
         img_dtype = img.dtype
-        # alpha = alpha[..., None]  # TODO: undo when testing batches!!
         img = paste_img * alpha + img * (1 - alpha)
         img = img.astype(img_dtype)
 
