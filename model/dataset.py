@@ -4,6 +4,9 @@ from torch.utils.data import Dataset
 import albumentations as A
 import random
 from skimage.filters import gaussian
+from torchvision import tv_tensors
+from torchvision.ops.boxes import masks_to_boxes
+from torchvision.transforms.v2 import functional as F
 
 from synthesis import utils
 
@@ -75,9 +78,11 @@ class SyntheticSPMDataset(Dataset):
             rotate=object_rot_limit, p=1.0, keep_ratio=True)
 
     def __len__(self):
+        #print(f'num samples: {len(self.surface_filepaths)}')
         return len(self.surface_filepaths)
 
     def __getitem__(self, idx):
+        #print(f'getting item {idx}')
         surface, objects = self.load_surface_and_objects()
         objects, masks = self.prepare_objects_and_masks(objects, surface.shape)
 
@@ -93,7 +98,22 @@ class SyntheticSPMDataset(Dataset):
         if self.transform:
             image = self.transform(image)
 
-        target = get_target_dict_from_data(objects, masks, idx)
+        # TODO: Remove image that was passed?
+        target = get_target_dict_from_data(objects, masks, idx, image)
+
+        # NOTE: for some reason, we require a 3-channel input :/.
+        # Forcing for now.
+        # TODO: Investigate how to resolve this...
+        # image = np.repeat(image[np.newaxis, ...], 3, axis=0)
+
+        # NOTE: must be float to work with scatterings (not double)!
+        image = torch.from_numpy(image).type(torch.float)
+
+        # Reshape to (1, W, H)
+        #image = image.view(1, image.size(0), image.size(1))
+        #print(f'image shape: {image.size()}')
+
+        #print(f'end getting item {idx}')
         return image, target
 
     def load_surface_and_objects(self) -> (np.array, list[np.array]):
@@ -130,7 +150,7 @@ class SyntheticSPMDataset(Dataset):
 
 
 def get_target_dict_from_data(objects: list[np.array], masks: list[np.array],
-                              image_idx: int) -> dict[str, torch.Tensor]:
+                              image_idx: int, img) -> dict[str, torch.Tensor]:
     """Create target dictionary from objects and masks.
 
     Args:
@@ -150,15 +170,24 @@ def get_target_dict_from_data(objects: list[np.array], masks: list[np.array],
         - 'masks': torchvision.tv_tensors.Mask of shape [N, H, W] with
         segmentation masks for each object.
     """
-    # Extract bounding boxes ???
-    boxes = [bounding_box_from_mask(mask) for mask in masks]
+    # get bounding box coordinates for each mask
+    masks = torch.from_numpy(np.array(masks)).type(torch.uint8)
+    boxes = masks_to_boxes(masks)
     num_objs = len(boxes)
 
-    boxes = np.array(boxes)
-    if num_objs > 0:
-        area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
-    else:
-        area = np.zeros((0, 4))
+#    if num_objs > 0:
+        #boxes = np.array(boxes)
+    area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
+    print(f'boxes: {boxes}')
+    print(f'area: {area}')
+
+    # else:
+    #     boxes = np.zeros((0, 4))
+    #     area = np.zeros((0, 4))
+    #     masks = np.zeros((0, 0, 0))  # empty mask
+
+    if area.nelement() == 0:
+        masks = torch.empty((0, 0, 0), dtype=torch.uint8)
 
     # there is only one class
     labels = torch.ones((num_objs,), dtype=torch.int64)
@@ -166,8 +195,53 @@ def get_target_dict_from_data(objects: list[np.array], masks: list[np.array],
     # suppose all instances are not crowd
     iscrowd = torch.zeros((num_objs,), dtype=torch.int64)
 
-    # Convert boxes to torch format for output?
-    boxes = torch.from_numpy(boxes)
+    image_idx = torch.tensor(image_idx)  #, dtype=torch.int8)
+
+    # Convert to tv types
+    img = tv_tensors.Image(img)
+    boxes = tv_tensors.BoundingBoxes(boxes, format="XYXY",
+                                     canvas_size=F.get_size(img))
+    masks = tv_tensors.Mask(masks)
+
+    print(f'after boxes: {boxes}')
+    print(f'masks: {masks}')
+
+
+    # ------------------ old version, worked.
+
+    # # Extract bounding boxes ???
+    # boxes = [bounding_box_from_mask(mask) for mask in masks]
+    # num_objs = len(boxes)
+
+    # if num_objs > 0:
+    #     boxes = np.array(boxes)
+    #     area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
+    # else:
+    #     boxes = np.zeros((0, 4))
+    #     area = np.zeros((0, 4))
+    #     masks = np.zeros((0, 0, 0))  # empty mask
+
+    # # there is only one class
+    # labels = torch.ones((num_objs,), dtype=torch.int64)
+
+    # # suppose all instances are not crowd
+    # iscrowd = torch.zeros((num_objs,), dtype=torch.int64)
+
+    # # Convert boxes to torch format for output?
+    # boxes = torch.from_numpy(boxes)
+
+    # masks = torch.from_numpy(np.array(masks)).type(torch.uint8)
+
+    # area = torch.from_numpy(np.array(area))
+    # # Image index was size num_objs...this makes more sense?
+    # image_idx = image_idx  # * torch.ones((1,), dtype=torch.int64)
+
+    # print(f'boxes shape: {boxes.size()}')
+    # print(f'masks shape: {masks.size()}')
+    # print(f'labels shape: {labels.size()}')
+    # print(f'image_id shape: {image_idx.size()}')
+    # print(f'area shape: {area.size()}')
+    # print(f'iscrowd shape: {iscrowd.size()}')
 
     # Package up data in dict and send out
     target = {}
