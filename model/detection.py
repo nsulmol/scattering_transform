@@ -1,6 +1,5 @@
 import torchvision.models.detection as tv_detection
 from kymatio.torch import Scattering2D
-#from kymatio.numpy import Scattering2D
 import torch.nn.functional as F
 from torch import nn, Tensor
 import torch
@@ -53,18 +52,6 @@ class Scattering2DPoolingBackbone(nn.Module):
         self.extra = nn.ModuleList(poolings)
 
     def forward(self, x: Tensor) -> dict[str, Tensor]:
-        #print(f'input dims: {x.size()}, type: {x.type()}')
-
-        # Hack-ey computation of scattering
-        # new_x = []
-        # for b in x.size(0):
-        #     channels = []
-        #     for c in x.size(1):
-        #         tmp = x.view(x.size(-2), x.size(-1))  # Go to (W, H) from (C, W, H)
-        #         channels.append(self.features.scattering(tmp))
-
-        #     new_x.append(channels)
-
         # Rescale? Normalize?
         rescaled = F.normalize(x)  # TODO: may not be necessary
         output = [rescaled]
@@ -103,7 +90,6 @@ class Scattering2DSSD(ssd.SSD):
         super().__init__(**kwargs)
 
         self.features = Scattering2D(J, shape, L, max_order)
-        # self.scattering = self.scattering.to(device)
 
     def forward(
         self, images: list[Tensor],
@@ -114,15 +100,6 @@ class Scattering2DSSD(ssd.SSD):
         res = []
         for image in images:
             scatterings = self.features.scattering(image)
-
-            #print(f'scatterings shape: {scatterings.size()}')
             res.append(scatterings.view(-1, scatterings.size(-2),
                                         scatterings.size(-1)))
-            #print(f'scatterings shape: {scatterings.size()}')
         return super().forward(res, targets)
-
-
-
-# TODO: Copy and fiddle around with ssd.py!
-# It is calling a normalize method (and probably other things) that we do ont
-# need.

@@ -22,10 +22,8 @@ def batch_images(images: List[Tensor]) -> Tensor:
                    images[0].shape[1],
                    images[0].shape[2])
     batched_imgs = images[0].new_full(batch_shape, 0)
-    #print(f'batched_imgs: {batched_imgs.size()}')
     for i in range(batched_imgs.shape[0]):
         img = images[i]
-        #print(f'img {i}: {img.size()}')
         batched_imgs[i, : img.shape[0], : img.shape[1], : img.shape[2]].copy_(img)
     return batched_imgs
 
@@ -213,9 +211,6 @@ class SSD(nn.Module):
             image_mean = [0.485, 0.456, 0.406]
         if image_std is None:
             image_std = [0.229, 0.224, 0.225]
-        # self.transform = GeneralizedRCNNTransform(
-        #     min(size), max(size), image_mean, image_std, size_divisible=1, fixed_size=size, **kwargs
-        # )
 
         self.score_thresh = score_thresh
         self.nms_thresh = nms_thresh
@@ -231,7 +226,6 @@ class SSD(nn.Module):
         self, losses: Dict[str, Tensor], detections: List[Dict[str, Tensor]]
     ) -> Tuple[Dict[str, Tensor], List[Dict[str, Tensor]]]:
         if self.training:
-            #print(f'Returning losses: {losses}')
             return losses
 
         return detections
@@ -334,10 +328,6 @@ class SSD(nn.Module):
             )
             original_image_sizes.append((val[0], val[1]))
 
-        # TODO: Nick removed this.
-        # transform the input
-        #images, targets = self.transform(images, targets)
-
         # HACK HACK Turn images into ImageList to continue.
         images = batch_images(images)
         images = ImageList(images, original_image_sizes)
@@ -358,25 +348,19 @@ class SSD(nn.Module):
                     )
 
         # get the features from the backbone
-        features = self.backbone(images.tensors)  # NOTE: was images.tensors)
+        features = self.backbone(images.tensors)
         if isinstance(features, torch.Tensor):
             features = OrderedDict([("0", features)])
 
         features = list(features.values())
 
-        #print(f'Features computed, length:{len(features)}')
-
         # compute the ssd heads outputs using the features
         head_outputs = self.head(features)
-
-        #print(f'Output from head: {head_outputs}')
 
         # create the set of anchors
         anchors = self.anchor_generator(images, features)
 
-        #print(f'anchors: {anchors}')
 
-        losses = {}
         detections: List[Dict[str, Tensor]] = []
         if self.training:
             matched_idxs = []
@@ -396,12 +380,8 @@ class SSD(nn.Module):
                     matched_idxs.append(self.proposal_matcher(match_quality_matrix))
 
                 losses = self.compute_loss(targets, head_outputs, anchors, matched_idxs)
-
-                #print(f'losses: {losses}')
         else:
             detections = self.postprocess_detections(head_outputs, anchors, images.image_sizes)
-            # detections = self.transform.postprocess(detections, images.image_sizes, original_image_sizes)
-
         if torch.jit.is_scripting():
             if not self._has_warned:
                 warnings.warn("SSD always returns a (Losses, Detections) tuple in scripting")
