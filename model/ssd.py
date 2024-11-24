@@ -206,12 +206,6 @@ class SSD(nn.Module):
         self.head = head
 
         self.proposal_matcher = det_utils.SSDMatcher(iou_thresh)
-
-        if image_mean is None:
-            image_mean = [0.485, 0.456, 0.406]
-        if image_std is None:
-            image_std = [0.229, 0.224, 0.225]
-
         self.score_thresh = score_thresh
         self.nms_thresh = nms_thresh
         self.detections_per_img = detections_per_img
@@ -360,7 +354,7 @@ class SSD(nn.Module):
         # create the set of anchors
         anchors = self.anchor_generator(images, features)
 
-
+        losses = {}
         detections: List[Dict[str, Tensor]] = []
         if self.training:
             matched_idxs = []

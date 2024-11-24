@@ -180,7 +180,6 @@ def get_target_dict_from_data(objects: list[np.array], masks: list[np.array],
     masks = tv_tensors.Mask(masks)
 
     # ------------------ old version, worked.
-
     # # Extract bounding boxes ???
     # boxes = [bounding_box_from_mask(mask) for mask in masks]
     # num_objs = len(boxes)
@@ -207,13 +206,6 @@ def get_target_dict_from_data(objects: list[np.array], masks: list[np.array],
     # area = torch.from_numpy(np.array(area))
     # # Image index was size num_objs...this makes more sense?
     # image_idx = image_idx  # * torch.ones((1,), dtype=torch.int64)
-
-    # print(f'boxes shape: {boxes.size()}')
-    # print(f'masks shape: {masks.size()}')
-    # print(f'labels shape: {labels.size()}')
-    # print(f'image_id shape: {image_idx.size()}')
-    # print(f'area shape: {area.size()}')
-    # print(f'iscrowd shape: {iscrowd.size()}')
 
     # Package up data in dict and send out
     target = {}
